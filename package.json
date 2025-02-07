@@ -11,7 +11,8 @@
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "body-parser": "^1.20.2",
-    "@vercel/kv": "^0.2.3"
+    "@vercel/kv": "^0.2.3",
+    "@vercel/edge-config": "^0.4.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
