@@ -1,7 +1,15 @@
 const express = require('express');
 const cors = require('cors');
-const { kv } = require('@vercel/kv');
+const { createClient } = require('@vercel/edge-config');
 const bodyParser = require('body-parser');
+
+// 環境變量配置
+const ENV_CONFIG = {
+    KV_REST_API_URL: 'https://vas-softphone-api-store.com',
+    KV_REST_API_TOKEN: 'AZHjASQgNDY4MjE0ZjAtZjM4Yy00ZjQ5LWI5ZjYtZDY2ZjE3ZmQ0ZjFmZDJlZjE4ZDY5ZjE0NDVhZTk5ZjJmZTY4ZjE5ZjE5ZmE=',
+    EDGE_CONFIG: 'https://edge-config.vercel.com/ecfg_ms8rteg96tlbsld0kuzjq4od3ex6?token=b9ee41d5-60a1-4268-8339-5eb4915ba3e1',
+    EDGE_CONFIG_DIGEST: '5bf6b008a9ec05f6870c476d10b53211797aa000f95aae344ae60f9b422286da'
+};
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -13,38 +21,30 @@ app.use(express.static('public'));
 
 // 檢查必要的環境變量
 const checkRequiredEnvVars = () => {
-    const required = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'];
-    const missing = required.filter(key => !process.env[key]);
-    
-    if (missing.length > 0) {
-        console.error('環境變量配置錯誤：');
-        console.error(`缺少必要的環境變量: ${missing.join(', ')}`);
-        console.error('請在Vercel項目設置中配置以下環境變量：');
-        console.error('1. KV_REST_API_URL - 從Vercel KV存儲服務獲取');
-        console.error('2. KV_REST_API_TOKEN - 從Vercel KV存儲服務獲取');
-        return false;
-    }
+    // 由於環境變量已經硬編碼，不需要檢查
     return true;
 };
 
-// 初始化Vercel KV存儲
-const initializeKV = async () => {
+// 初始化Edge Config客戶端
+const edgeConfig = createClient(ENV_CONFIG.EDGE_CONFIG);
+
+// 初始化Edge Config
+const initializeEdgeConfig = async () => {
     if (!checkRequiredEnvVars()) {
         process.exit(1);
     }
 
     try {
-        // 測試KV連接
-        await kv.set('test_connection', 'ok');
-        await kv.del('test_connection');
-        console.log('成功連接到Vercel KV存儲');
+        // 測試Edge Config連接
+        await edgeConfig.get('devices');
+        console.log('成功連接到Vercel Edge Config');
     } catch (error) {
-        console.error('Vercel KV存儲連接錯誤:', error);
+        console.error('Vercel Edge Config連接錯誤:', error);
         process.exit(1);
     }
 };
 
-initializeKV();
+initializeEdgeConfig();
 
 // 設備註冊端點
 app.post('/api/register-device', async (req, res) => {
@@ -60,21 +60,25 @@ app.post('/api/register-device', async (req, res) => {
     }
 
     try {
+        // 獲取現有設備列表
+        let devices = await edgeConfig.get('devices') || {};
+        
         // 更新或插入設備記錄
-        const device = {
+        devices[extension] = {
             extension,
             token,
             platform,
             updated_at: new Date().toISOString()
         };
 
-        await kv.set(`device:${extension}`, device);
-        console.log('設備註冊成功:', device);
+        // 更新Edge Config
+        await edgeConfig.set('devices', devices);
+        console.log('設備註冊成功:', devices[extension]);
 
         res.json({
             success: true,
             message: '設備註冊成功',
-            device
+            device: devices[extension]
         });
     } catch (error) {
         console.error('註冊設備錯誤:', error);
@@ -89,14 +93,12 @@ app.post('/api/register-device', async (req, res) => {
 // 獲取所有註冊設備
 app.get('/api/devices', async (req, res) => {
     try {
-        const keys = await kv.keys('device:*');
-        const devices = await Promise.all(
-            keys.map(key => kv.get(key))
-        );
+        const devices = await edgeConfig.get('devices') || {};
+        const deviceList = Object.values(devices);
 
         res.json({
             success: true,
-            devices: devices.sort((a, b) => 
+            devices: deviceList.sort((a, b) => 
                 new Date(b.updated_at) - new Date(a.updated_at)
             )
         });
@@ -114,15 +116,16 @@ app.delete('/api/devices/:extension', async (req, res) => {
     const { extension } = req.params;
 
     try {
-        const device = await kv.get(`device:${extension}`);
-        if (!device) {
+        const devices = await edgeConfig.get('devices') || {};
+        if (!devices[extension]) {
             return res.status(404).json({
                 success: false,
                 message: '未找到指定設備'
             });
         }
 
-        await kv.del(`device:${extension}`);
+        delete devices[extension];
+        await edgeConfig.set('devices', devices);
 
         res.json({
             success: true,
