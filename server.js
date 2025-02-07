@@ -35,26 +35,36 @@ apiRouter.post('/register-device', async (req, res) => {
     }
 
     try {
+        console.log('開始處理設備註冊請求...');
         // 獲取現有設備列表
-        let devices = await edgeConfig.get('devices') || {};
+        let devices = await edgeConfig.get('devices');
+        console.log('當前設備列表:', devices);
+        
+        if (!devices) {
+            console.log('設備列表為空，初始化為空對象');
+            devices = {};
+        }
         
         // 更新或插入設備記錄
-        devices[extension] = {
+        const deviceInfo = {
             extension,
             token,
             platform,
             updated_at: new Date().toISOString()
         };
+        devices[extension] = deviceInfo;
 
         // 更新Edge Config
+        console.log('準備更新Edge Config...');
         await edgeConfig.set('devices', devices);
-        console.log('設備註冊成功:', devices[extension]);
+        console.log('Edge Config更新成功');
 
         res.json({
             success: true,
             message: '設備註冊成功',
-            device: devices[extension]
+            device: deviceInfo
         });
+        console.log('註冊響應已發送');
     } catch (error) {
         console.error('註冊設備錯誤:', error);
         res.status(500).json({
@@ -141,109 +151,22 @@ const initializeEdgeConfig = async () => {
 
     try {
         // 測試Edge Config連接
-        await edgeConfig.get('devices');
-        console.log('成功連接到Vercel Edge Config');
+        const testResult = await edgeConfig.get('devices');
+        console.log('成功連接到Vercel Edge Config，當前設備列表:', testResult);
     } catch (error) {
         console.error('Vercel Edge Config連接錯誤:', error);
+        console.error('錯誤詳情:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+        });
         process.exit(1);
     }
 };
 
 initializeEdgeConfig();
 
-// 設備註冊端點
-app.post('/api/register-device', async (req, res) => {
-    console.log('收到註冊請求:', req.body);
-    const { extension, token, platform } = req.body;
 
-    if (!extension || !token || !platform) {
-        console.warn('註冊請求缺少參數:', req.body);
-        return res.status(400).json({
-            success: false,
-            message: '缺少必要參數'
-        });
-    }
-
-    try {
-        // 獲取現有設備列表
-        let devices = await edgeConfig.get('devices') || {};
-        
-        // 更新或插入設備記錄
-        devices[extension] = {
-            extension,
-            token,
-            platform,
-            updated_at: new Date().toISOString()
-        };
-
-        // 更新Edge Config
-        await edgeConfig.set('devices', devices);
-        console.log('設備註冊成功:', devices[extension]);
-
-        res.json({
-            success: true,
-            message: '設備註冊成功',
-            device: devices[extension]
-        });
-    } catch (error) {
-        console.error('註冊設備錯誤:', error);
-        res.status(500).json({
-            success: false,
-            message: '設備註冊失敗',
-            error: error.message
-        });
-    }
-});
-
-// 獲取所有註冊設備
-app.get('/api/devices', async (req, res) => {
-    try {
-        const devices = await edgeConfig.get('devices') || {};
-        const deviceList = Object.values(devices);
-
-        res.json({
-            success: true,
-            devices: deviceList.sort((a, b) => 
-                new Date(b.updated_at) - new Date(a.updated_at)
-            )
-        });
-    } catch (error) {
-        console.error('獲取設備列表錯誤:', error);
-        res.status(500).json({
-            success: false,
-            message: '獲取設備列表失敗'
-        });
-    }
-});
-
-// 刪除設備註冊
-app.delete('/api/devices/:extension', async (req, res) => {
-    const { extension } = req.params;
-
-    try {
-        const devices = await edgeConfig.get('devices') || {};
-        if (!devices[extension]) {
-            return res.status(404).json({
-                success: false,
-                message: '未找到指定設備'
-            });
-        }
-
-        delete devices[extension];
-        await edgeConfig.set('devices', devices);
-
-        res.json({
-            success: true,
-            message: '設備已成功刪除'
-        });
-    } catch (error) {
-        console.error('刪除設備錯誤:', error);
-        res.status(500).json({
-            success: false,
-            message: '刪除設備失敗'
-        });
-    }
-});
 
 // 啟動服務器
 app.listen(port, () => {
