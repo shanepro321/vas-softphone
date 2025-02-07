@@ -66,6 +66,13 @@ apiRouter.post('/register-device', async (req, res) => {
             inMemoryDevices[extension] = deviceInfo;
         }
 
+        // 設置緩存控制頭部
+        res.set({
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        });
+        
         res.json({
             success: true,
             message: '設備註冊成功',
