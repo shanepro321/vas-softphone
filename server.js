@@ -91,8 +91,24 @@ apiRouter.post('/register-device', async (req, res) => {
 
 apiRouter.get('/devices', async (req, res) => {
     try {
-        const devices = await edgeConfig.get('devices') || {};
+        let devices = {};
+        if (edgeConfig) {
+            try {
+                devices = await edgeConfig.get('devices') || {};
+                console.log('成功從Edge Config獲取設備列表');
+            } catch (error) {
+                console.error('從Edge Config獲取設備列表失敗:', error);
+                // 如果Edge Config失敗，使用內存存儲
+                devices = inMemoryDevices;
+                console.log('使用內存存儲作為備用');
+            }
+        } else {
+            devices = inMemoryDevices;
+            console.log('使用內存存儲獲取設備列表');
+        }
+
         const deviceList = Object.values(devices);
+        console.log(`成功獲取設備列表，共${deviceList.length}個設備`);
 
         res.json({
             success: true,
@@ -101,10 +117,16 @@ apiRouter.get('/devices', async (req, res) => {
             )
         });
     } catch (error) {
-        console.error('獲取設備列表錯誤:', error);
+        console.error('獲取設備列表時發生錯誤:', error);
+        console.error('錯誤詳情:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+        });
         res.status(500).json({
             success: false,
-            message: '獲取設備列表失敗'
+            message: '獲取設備列表失敗',
+            error: error.message
         });
     }
 });
