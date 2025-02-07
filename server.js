@@ -18,6 +18,104 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// API路由處理
+const apiRouter = express.Router();
+
+// 將所有API路由添加到apiRouter
+apiRouter.post('/register-device', async (req, res) => {
+    console.log('收到註冊請求:', req.body);
+    const { extension, token, platform } = req.body;
+
+    if (!extension || !token || !platform) {
+        console.warn('註冊請求缺少參數:', req.body);
+        return res.status(400).json({
+            success: false,
+            message: '缺少必要參數'
+        });
+    }
+
+    try {
+        // 獲取現有設備列表
+        let devices = await edgeConfig.get('devices') || {};
+        
+        // 更新或插入設備記錄
+        devices[extension] = {
+            extension,
+            token,
+            platform,
+            updated_at: new Date().toISOString()
+        };
+
+        // 更新Edge Config
+        await edgeConfig.set('devices', devices);
+        console.log('設備註冊成功:', devices[extension]);
+
+        res.json({
+            success: true,
+            message: '設備註冊成功',
+            device: devices[extension]
+        });
+    } catch (error) {
+        console.error('註冊設備錯誤:', error);
+        res.status(500).json({
+            success: false,
+            message: '設備註冊失敗',
+            error: error.message
+        });
+    }
+});
+
+apiRouter.get('/devices', async (req, res) => {
+    try {
+        const devices = await edgeConfig.get('devices') || {};
+        const deviceList = Object.values(devices);
+
+        res.json({
+            success: true,
+            devices: deviceList.sort((a, b) => 
+                new Date(b.updated_at) - new Date(a.updated_at)
+            )
+        });
+    } catch (error) {
+        console.error('獲取設備列表錯誤:', error);
+        res.status(500).json({
+            success: false,
+            message: '獲取設備列表失敗'
+        });
+    }
+});
+
+apiRouter.delete('/devices/:extension', async (req, res) => {
+    const { extension } = req.params;
+
+    try {
+        const devices = await edgeConfig.get('devices') || {};
+        if (!devices[extension]) {
+            return res.status(404).json({
+                success: false,
+                message: '未找到指定設備'
+            });
+        }
+
+        delete devices[extension];
+        await edgeConfig.set('devices', devices);
+
+        res.json({
+            success: true,
+            message: '設備已成功刪除'
+        });
+    } catch (error) {
+        console.error('刪除設備錯誤:', error);
+        res.status(500).json({
+            success: false,
+            message: '刪除設備失敗'
+        });
+    }
+});
+
+// 將API路由掛載到/api前綴
+app.use('/api', apiRouter);
+
 // 靜態文件服務
 app.use(express.static('public'));
 
