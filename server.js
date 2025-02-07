@@ -21,6 +21,9 @@ app.use(bodyParser.json());
 // API路由處理
 const apiRouter = express.Router();
 
+// 內存中的設備列表備用存儲
+let inMemoryDevices = {};
+
 // 將所有API路由添加到apiRouter
 apiRouter.post('/register-device', async (req, res) => {
     console.log('收到註冊請求:', req.body);
@@ -36,64 +39,41 @@ apiRouter.post('/register-device', async (req, res) => {
 
     try {
         console.log('開始處理設備註冊請求...');
-        // 驗證Edge Config連接
-        if (!edgeConfig) {
-            throw new Error('Edge Config客戶端未初始化');
-        }
-
-        // 獲取現有設備列表
-        let devices;
-        try {
-            devices = await edgeConfig.get('devices');
-            console.log('成功獲取當前設備列表:', devices);
-        } catch (getError) {
-            console.error('獲取設備列表失敗:', getError);
-            devices = {};
-            console.log('初始化空的設備列表');
-        }
-
-        if (!devices) {
-            devices = {};
-            console.log('設備列表為空，初始化為空對象');
-        }
-        
-        // 更新或插入設備記錄
         const deviceInfo = {
             extension,
             token,
             platform,
             updated_at: new Date().toISOString()
         };
-        devices[extension] = deviceInfo;
 
-        // 更新Edge Config
-        console.log('準備更新Edge Config...');
-        try {
-            await edgeConfig.set('devices', devices);
-            console.log('Edge Config更新成功');
-
-            res.json({
-                success: true,
-                message: '設備註冊成功',
-                device: deviceInfo
-            });
-            console.log('註冊響應已發送');
-        } catch (setError) {
-            console.error('更新Edge Config失敗:', {
-                error: setError,
-                errorName: setError.name,
-                errorMessage: setError.message,
-                errorStack: setError.stack
-            });
-            throw new Error('更新設備信息失敗: ' + setError.message);
+        if (edgeConfig) {
+            try {
+                // 獲取現有設備列表
+                let devices = await edgeConfig.get('devices') || {};
+                devices[extension] = deviceInfo;
+                
+                // 更新Edge Config
+                await edgeConfig.set('devices', devices);
+                console.log('Edge Config更新成功');
+            } catch (error) {
+                console.error('Edge Config操作失敗，使用內存存儲:', error);
+                // 如果Edge Config失敗，使用內存存儲
+                inMemoryDevices[extension] = deviceInfo;
+            }
+        } else {
+            // 直接使用內存存儲
+            console.log('使用內存存儲設備信息');
+            inMemoryDevices[extension] = deviceInfo;
         }
-    } catch (error) {
-        console.error('註冊設備錯誤:', {
-            error,
-            errorName: error.name,
-            errorMessage: error.message,
-            errorStack: error.stack
+
+        res.json({
+            success: true,
+            message: '設備註冊成功',
+            device: deviceInfo
         });
+        console.log('註冊響應已發送');
+    } catch (error) {
+        console.error('註冊設備錯誤:', error);
         res.status(500).json({
             success: false,
             message: '設備註冊失敗',
@@ -168,7 +148,7 @@ const checkRequiredEnvVars = () => {
 };
 
 // 初始化Edge Config客戶端
-const edgeConfig = createClient(ENV_CONFIG.EDGE_CONFIG);
+let edgeConfig;
 
 // 初始化Edge Config
 const initializeEdgeConfig = async () => {
@@ -177,6 +157,7 @@ const initializeEdgeConfig = async () => {
     }
 
     try {
+        edgeConfig = createClient(ENV_CONFIG.EDGE_CONFIG);
         // 測試Edge Config連接
         const testResult = await edgeConfig.get('devices');
         console.log('成功連接到Vercel Edge Config，當前設備列表:', testResult);
@@ -187,7 +168,9 @@ const initializeEdgeConfig = async () => {
             message: error.message,
             stack: error.stack
         });
-        process.exit(1);
+        // 不要立即退出，而是繼續運行服務器
+        console.log('Edge Config連接失敗，將使用內存存儲作為備用');
+        edgeConfig = null;
     }
 };
 
