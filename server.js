@@ -167,7 +167,13 @@ const initializeEdgeConfig = async () => {
         edgeConfig = createClient(ENV_CONFIG.EDGE_CONFIG);
         // 測試Edge Config連接
         const testResult = await edgeConfig.get('devices');
-        console.log('成功連接到Vercel Edge Config，當前設備列表:', testResult);
+        if (!testResult) {
+            // 如果devices為空，初始化為空對象
+            await edgeConfig.set('devices', {});
+            console.log('初始化空的設備列表');
+        } else {
+            console.log('成功連接到Vercel Edge Config，當前設備列表:', testResult);
+        }
     } catch (error) {
         console.error('Vercel Edge Config連接錯誤:', error);
         console.error('錯誤詳情:', {
