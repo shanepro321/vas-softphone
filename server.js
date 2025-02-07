@@ -14,9 +14,13 @@ app.use(express.static('public'));
 // 初始化Vercel KV存儲
 const initializeKV = async () => {
     try {
+        // 測試KV連接
+        await kv.set('test_connection', 'ok');
+        await kv.del('test_connection');
         console.log('成功連接到Vercel KV存儲');
     } catch (error) {
         console.error('Vercel KV存儲連接錯誤:', error);
+        process.exit(1); // 如果KV存儲連接失敗，終止應用
     }
 };
 
@@ -24,9 +28,11 @@ initializeKV();
 
 // 設備註冊端點
 app.post('/api/register-device', async (req, res) => {
+    console.log('收到註冊請求:', req.body);
     const { extension, token, platform } = req.body;
 
     if (!extension || !token || !platform) {
+        console.warn('註冊請求缺少參數:', req.body);
         return res.status(400).json({
             success: false,
             message: '缺少必要參數'
@@ -43,6 +49,7 @@ app.post('/api/register-device', async (req, res) => {
         };
 
         await kv.set(`device:${extension}`, device);
+        console.log('設備註冊成功:', device);
 
         res.json({
             success: true,
@@ -53,7 +60,8 @@ app.post('/api/register-device', async (req, res) => {
         console.error('註冊設備錯誤:', error);
         res.status(500).json({
             success: false,
-            message: '設備註冊失敗'
+            message: '設備註冊失敗',
+            error: error.message
         });
     }
 });
