@@ -141,16 +141,43 @@ apiRouter.delete('/devices/:company_code/:extension', async (req, res) => {
     const deviceKey = `${company_code}-${extension}`;
 
     try {
-        const devices = await edgeConfig.get('devices') || {};
+        let devices;
+        if (edgeConfig) {
+            try {
+                devices = await edgeConfig.get('devices') || {};
+            } catch (edgeError) {
+                console.error('從Edge Config獲取設備列表失敗:', edgeError);
+                devices = inMemoryDevices;
+            }
+        } else {
+            devices = inMemoryDevices;
+        }
+
         if (!devices[deviceKey]) {
             return res.status(404).json({
                 success: false,
-                message: '未找到指定設備'
+                message: `未找到公司代碼為 ${company_code} 分機號為 ${extension} 的設備`
             });
         }
 
-        delete devices[deviceKey];
-        await edgeConfig.set('devices', devices);
+        if (edgeConfig) {
+            try {
+                delete devices[deviceKey];
+                await edgeConfig.set('devices', devices);
+                // 同步更新內存存儲
+                delete inMemoryDevices[deviceKey];
+            } catch (edgeError) {
+                console.error('Edge Config刪除設備失敗:', edgeError);
+                // 嘗試僅從內存中刪除
+                delete inMemoryDevices[deviceKey];
+                return res.status(200).json({
+                    success: true,
+                    message: '設備已從內存中刪除（Edge Config更新失敗）'
+                });
+            }
+        } else {
+            delete inMemoryDevices[deviceKey];
+        }
 
         res.json({
             success: true,
@@ -158,9 +185,14 @@ apiRouter.delete('/devices/:company_code/:extension', async (req, res) => {
         });
     } catch (error) {
         console.error('刪除設備錯誤:', error);
+        console.error('錯誤詳情:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack
+        });
         res.status(500).json({
             success: false,
-            message: '刪除設備失敗'
+            message: `刪除設備失敗: ${error.message}`
         });
     }
 });
