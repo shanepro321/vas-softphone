@@ -11,8 +11,28 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// 檢查必要的環境變量
+const checkRequiredEnvVars = () => {
+    const required = ['KV_REST_API_URL', 'KV_REST_API_TOKEN'];
+    const missing = required.filter(key => !process.env[key]);
+    
+    if (missing.length > 0) {
+        console.error('環境變量配置錯誤：');
+        console.error(`缺少必要的環境變量: ${missing.join(', ')}`);
+        console.error('請在Vercel項目設置中配置以下環境變量：');
+        console.error('1. KV_REST_API_URL - 從Vercel KV存儲服務獲取');
+        console.error('2. KV_REST_API_TOKEN - 從Vercel KV存儲服務獲取');
+        return false;
+    }
+    return true;
+};
+
 // 初始化Vercel KV存儲
 const initializeKV = async () => {
+    if (!checkRequiredEnvVars()) {
+        process.exit(1);
+    }
+
     try {
         // 測試KV連接
         await kv.set('test_connection', 'ok');
@@ -20,7 +40,7 @@ const initializeKV = async () => {
         console.log('成功連接到Vercel KV存儲');
     } catch (error) {
         console.error('Vercel KV存儲連接錯誤:', error);
-        process.exit(1); // 如果KV存儲連接失敗，終止應用
+        process.exit(1);
     }
 };
 
