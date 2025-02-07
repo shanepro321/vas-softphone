@@ -100,9 +100,10 @@
                                 <td>${device.extension}</td>
                                 <td>${device.token}</td>
                                 <td>${device.platform}</td>
+                                <td>${device.company_code}</td>
                                 <td>${new Date(device.updated_at).toLocaleString()}</td>
                                 <td>
-                                    <button class="delete-btn" onclick="deleteDevice('${device.extension}')">刪除</button>
+                                    <button class="delete-btn" onclick="deleteDevice('${device.company_code}', '${device.extension}')">刪除</button>
                                 </td>
                             `;
                             tableBody.appendChild(row);
@@ -112,9 +113,9 @@
                 .catch(error => console.error('加載設備列表失敗:', error));
         }
 
-        function deleteDevice(extension) {
-            if (confirm(`確定要刪除分機 ${extension} 的註冊信息嗎？`)) {
-                fetch(`/api/devices/${extension}`, {
+        function deleteDevice(companyCode, extension) {
+            if (confirm(`確定要刪除公司 ${companyCode} 的分機 ${extension} 的註冊信息嗎？`)) {
+                fetch(`/api/devices/${companyCode}/${extension}`, {
                     method: 'DELETE'
                 })
                 .then(response => response.json())
