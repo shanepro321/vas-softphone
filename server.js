@@ -17,7 +17,14 @@ const port = process.env.PORT || 3000;
 // 中間件配置
 app.use(cors());
 app.use(bodyParser.json());
+
+// 靜態文件服務
 app.use(express.static('public'));
+
+// 根路由處理
+app.get('/', (req, res) => {
+    res.sendFile('index.html', { root: './public' });
+});
 
 // 檢查必要的環境變量
 const checkRequiredEnvVars = () => {
