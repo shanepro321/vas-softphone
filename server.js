@@ -27,9 +27,9 @@ let inMemoryDevices = {};
 // 將所有API路由添加到apiRouter
 apiRouter.post('/register-device', async (req, res) => {
     console.log('收到註冊請求:', req.body);
-    const { extension, token, platform } = req.body;
+    const { extension, token, platform, company_code } = req.body;
 
-    if (!extension || !token || !platform) {
+    if (!extension || !token || !platform || !company_code) {
         console.warn('註冊請求缺少參數:', req.body);
         return res.status(400).json({
             success: false,
@@ -43,6 +43,7 @@ apiRouter.post('/register-device', async (req, res) => {
             extension,
             token,
             platform,
+            company_code,
             updated_at: new Date().toISOString()
         };
 
@@ -50,7 +51,9 @@ apiRouter.post('/register-device', async (req, res) => {
             try {
                 // 獲取現有設備列表
                 let devices = await edgeConfig.get('devices') || {};
-                devices[extension] = deviceInfo;
+                // 使用公司代碼和分機號的組合作為唯一標識
+                const deviceKey = `${company_code}-${extension}`;
+                devices[deviceKey] = deviceInfo;
                 
                 // 更新Edge Config
                 await edgeConfig.set('devices', devices);
@@ -58,12 +61,14 @@ apiRouter.post('/register-device', async (req, res) => {
             } catch (error) {
                 console.error('Edge Config操作失敗，使用內存存儲:', error);
                 // 如果Edge Config失敗，使用內存存儲
-                inMemoryDevices[extension] = deviceInfo;
+                const deviceKey = `${company_code}-${extension}`;
+                inMemoryDevices[deviceKey] = deviceInfo;
             }
         } else {
             // 直接使用內存存儲
             console.log('使用內存存儲設備信息');
-            inMemoryDevices[extension] = deviceInfo;
+            const deviceKey = `${company_code}-${extension}`;
+            inMemoryDevices[deviceKey] = deviceInfo;
         }
 
         // 設置緩存控制頭部
@@ -131,19 +136,20 @@ apiRouter.get('/devices', async (req, res) => {
     }
 });
 
-apiRouter.delete('/devices/:extension', async (req, res) => {
-    const { extension } = req.params;
+apiRouter.delete('/devices/:company_code/:extension', async (req, res) => {
+    const { company_code, extension } = req.params;
+    const deviceKey = `${company_code}-${extension}`;
 
     try {
         const devices = await edgeConfig.get('devices') || {};
-        if (!devices[extension]) {
+        if (!devices[deviceKey]) {
             return res.status(404).json({
                 success: false,
                 message: '未找到指定設備'
             });
         }
 
-        delete devices[extension];
+        delete devices[deviceKey];
         await edgeConfig.set('devices', devices);
 
         res.json({
